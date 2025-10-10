@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2020 Zach Daniel
+
+SPDX-License-Identifier: MIT
+-->
+
 # Getting Started with CSV
 
 AshCsv offers basic support for storing and reading resources from csv files.

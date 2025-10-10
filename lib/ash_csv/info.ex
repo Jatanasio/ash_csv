@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshCsv.DataLayer.Info do
   @moduledoc "Introspection helpers for AshCsv.DataLayer"
 
