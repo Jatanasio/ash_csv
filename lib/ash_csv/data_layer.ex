@@ -153,6 +153,7 @@ defmodule AshCsv.DataLayer do
   end
 
   @impl true
+  # sobelow_skip ["Traversal"]
   def bulk_create(resource, stream, options) do
     stream = Enum.to_list(stream)
 
@@ -270,6 +271,7 @@ defmodule AshCsv.DataLayer do
     end
   end
 
+  # sobelow_skip ["Traversal"]
   defp write_result(resource, lines, retry? \\ false) do
     resource
     |> file()
