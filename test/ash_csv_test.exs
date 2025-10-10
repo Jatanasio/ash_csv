@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 defmodule AshCsvTest do
   use ExUnit.Case, async: false
   alias AshCsv.Test.Post

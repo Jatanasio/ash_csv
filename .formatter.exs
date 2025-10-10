@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2020 Zach Daniel
+#
+# SPDX-License-Identifier: MIT
+
 spark_locals_without_parens = [columns: 1, create?: 1, file: 1, header?: 1, separator: 1]
 
 [
