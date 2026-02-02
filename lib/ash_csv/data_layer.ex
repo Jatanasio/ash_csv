@@ -209,7 +209,7 @@ defmodule AshCsv.DataLayer do
             else
               case dump_row(resource, changeset) do
                 {:ok, row} ->
-                  # NimbleCSV: encode one row to iodata (replaces CSV.encode(separator: separator(resource)) |> Enum.to_list())
+                  # Replace CSV library operations with NimbleCSV operations
                   iodata = csv_module(resource).dump_to_iodata([row])
 
                   result =
@@ -274,7 +274,6 @@ defmodule AshCsv.DataLayer do
   end
 
   # sobelow_skip ["Traversal"]
-  # NimbleCSV: param is iodata from dump_to_iodata (was "lines" from CSV.encode |> Enum.to_list())
   defp write_result(resource, iodata, retry? \\ false) do
     resource
     |> file()
@@ -418,7 +417,6 @@ defmodule AshCsv.DataLayer do
     end)
     |> case do
       {:ok, rows} ->
-        # NimbleCSV: encode remaining rows to iodata (replaces CSV.encode(separator: ...) |> Enum.to_list())
         iodata = csv_module(resource).dump_to_iodata(rows)
 
         iodata =
@@ -476,7 +474,6 @@ defmodule AshCsv.DataLayer do
     end)
     |> case do
       {:ok, rows} ->
-        # NimbleCSV: encode all rows to iodata (replaces CSV.encode(separator: ...) |> Enum.to_list())
         iodata = csv_module(resource).dump_to_iodata(rows)
 
         if File.exists?(file(resource)) do
@@ -555,7 +552,6 @@ defmodule AshCsv.DataLayer do
       |> file()
       |> then(fn file ->
         if decode? do
-          # NimbleCSV: decode stream of lines to stream of rows (replaces CSV.decode(separator: ...)); parse_stream yields rows directly (no {:ok, row} wrapper)
           file
           |> File.stream!()
           |> Stream.drop(amount_to_drop)
@@ -582,7 +578,6 @@ defmodule AshCsv.DataLayer do
 
     {:ok, results}
   rescue
-    # NimbleCSV: parse_stream raises on malformed CSV; convert to {:error, message} for caller
     e in NimbleCSV.ParseError ->
       {:error, Exception.message(e)}
 
@@ -641,7 +636,6 @@ defmodule AshCsv.DataLayer do
 
       case row do
         {:ok, row} ->
-          # NimbleCSV: encode one row to iodata (replaces CSV.encode(separator: ...) |> Enum.to_list())
           iodata = csv_module(resource).dump_to_iodata([Enum.reverse(row)])
 
           result =
@@ -707,7 +701,7 @@ defmodule AshCsv.DataLayer do
     end
   end
 
-  # NimbleCSV: returns per-resource parser module (from BuildParser); used for dump_to_iodata/1 and parse_stream/1
+  # Initialize the NimbleCSV module for the resource
   defp csv_module(resource) do
     resource.ash_csv_csv_module()
   end
