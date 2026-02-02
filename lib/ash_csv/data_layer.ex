@@ -209,10 +209,8 @@ defmodule AshCsv.DataLayer do
             else
               case dump_row(resource, changeset) do
                 {:ok, row} ->
-                  lines =
-                    [row]
-                    |> CSV.encode(separator: separator(resource))
-                    |> Enum.to_list()
+                  # NimbleCSV: encode one row to iodata (replaces CSV.encode(separator: separator(resource)) |> Enum.to_list())
+                  iodata = csv_module(resource).dump_to_iodata([row])
 
                   result =
                     if File.exists?(file(resource)) do
@@ -232,7 +230,7 @@ defmodule AshCsv.DataLayer do
                       {:halt, {:error, error}}
 
                     :ok ->
-                      case write_result(resource, lines) do
+                      case write_result(resource, iodata) do
                         :ok ->
                           new_results =
                             if options.return_records? do
@@ -276,10 +274,11 @@ defmodule AshCsv.DataLayer do
   end
 
   # sobelow_skip ["Traversal"]
-  defp write_result(resource, lines, retry? \\ false) do
+  # NimbleCSV: param is iodata from dump_to_iodata (was "lines" from CSV.encode |> Enum.to_list())
+  defp write_result(resource, iodata, retry? \\ false) do
     resource
     |> file()
-    |> File.write(lines, [:append])
+    |> File.write(iodata, [:append])
     |> case do
       :ok ->
         :ok
@@ -289,7 +288,7 @@ defmodule AshCsv.DataLayer do
 
       {:error, :enoent} ->
         if create?(resource) do
-          write_result(resource, lines, true)
+          write_result(resource, iodata, true)
         else
           {:error, "Error while writing to CSV: #{inspect(:enoent)}"}
         end
@@ -419,21 +418,19 @@ defmodule AshCsv.DataLayer do
     end)
     |> case do
       {:ok, rows} ->
-        lines =
-          rows
-          |> CSV.encode(separator: separator(resource))
-          |> Enum.to_list()
+        # NimbleCSV: encode remaining rows to iodata (replaces CSV.encode(separator: ...) |> Enum.to_list())
+        iodata = csv_module(resource).dump_to_iodata(rows)
 
-        lines =
+        iodata =
           if header?(resource) do
-            [header(resource) | lines]
+            [header(resource), iodata]
           else
-            lines
+            iodata
           end
 
         resource
         |> file()
-        |> File.write(lines, [:write])
+        |> File.write(iodata, [:write])
         |> case do
           :ok ->
             :ok
@@ -479,10 +476,8 @@ defmodule AshCsv.DataLayer do
     end)
     |> case do
       {:ok, rows} ->
-        lines =
-          rows
-          |> CSV.encode(separator: separator(resource))
-          |> Enum.to_list()
+        # NimbleCSV: encode all rows to iodata (replaces CSV.encode(separator: ...) |> Enum.to_list())
+        iodata = csv_module(resource).dump_to_iodata(rows)
 
         if File.exists?(file(resource)) do
           :ok
@@ -496,16 +491,16 @@ defmodule AshCsv.DataLayer do
           end
         end
 
-        lines =
+        iodata =
           if header?(resource) do
-            [header(resource) | lines]
+            [header(resource), iodata]
           else
-            lines
+            iodata
           end
 
         resource
         |> file()
-        |> File.write(lines, [:write])
+        |> File.write(iodata, [:write])
         |> case do
           :ok ->
             {:ok, struct(changeset.data, changeset.attributes)}
@@ -560,19 +555,16 @@ defmodule AshCsv.DataLayer do
       |> file()
       |> then(fn file ->
         if decode? do
+          # NimbleCSV: decode stream of lines to stream of rows (replaces CSV.decode(separator: ...)); parse_stream yields rows directly (no {:ok, row} wrapper)
           file
           |> File.stream!()
           |> Stream.drop(amount_to_drop)
-          |> CSV.decode(separator: separator(resource))
-          |> Stream.map(fn
-            {:error, error} ->
-              throw({:error, error})
-
-            {:ok, row} ->
-              case cast_stored(resource, row) do
-                {:ok, casted} -> casted
-                {:error, error} -> throw({:error, error})
-              end
+          |> csv_module(resource).parse_stream(skip_headers: false)
+          |> Stream.map(fn row ->
+            case cast_stored(resource, row) do
+              {:ok, casted} -> casted
+              {:error, error} -> throw({:error, error})
+            end
           end)
           |> filter_stream(domain, filter)
           |> sort_stream(resource, domain, sort)
@@ -583,20 +575,17 @@ defmodule AshCsv.DataLayer do
           file
           |> File.stream!()
           |> Stream.drop(amount_to_drop)
-          |> CSV.decode(separator: separator(resource))
-          |> Stream.map(fn
-            {:error, error} ->
-              throw({:error, error})
-
-            {:ok, row} ->
-              row
-          end)
+          |> csv_module(resource).parse_stream(skip_headers: false)
           |> Enum.to_list()
         end
       end)
 
     {:ok, results}
   rescue
+    # NimbleCSV: parse_stream raises on malformed CSV; convert to {:error, message} for caller
+    e in NimbleCSV.ParseError ->
+      {:error, Exception.message(e)}
+
     e in File.Error ->
       if e.reason == :enoent && !retry? do
         file = file(resource)
@@ -652,10 +641,8 @@ defmodule AshCsv.DataLayer do
 
       case row do
         {:ok, row} ->
-          lines =
-            [Enum.reverse(row)]
-            |> CSV.encode(separator: separator(resource))
-            |> Enum.to_list()
+          # NimbleCSV: encode one row to iodata (replaces CSV.encode(separator: ...) |> Enum.to_list())
+          iodata = csv_module(resource).dump_to_iodata([Enum.reverse(row)])
 
           result =
             if File.exists?(file(resource)) do
@@ -677,7 +664,7 @@ defmodule AshCsv.DataLayer do
             :ok ->
               resource
               |> file()
-              |> File.write(lines, [:append])
+              |> File.write(iodata, [:append])
               |> case do
                 :ok ->
                   {:ok, struct(resource, changeset.attributes)}
@@ -718,5 +705,10 @@ defmodule AshCsv.DataLayer do
     else
       ""
     end
+  end
+
+  # NimbleCSV: returns per-resource parser module (from BuildParser); used for dump_to_iodata/1 and parse_stream/1
+  defp csv_module(resource) do
+    resource.ash_csv_csv_module()
   end
 end

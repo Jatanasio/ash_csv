@@ -9,6 +9,17 @@ defmodule AshCsv.DataLayer.Transformers.BuildParser do
   def transform(dsl) do
     columns = AshCsv.DataLayer.Info.columns(dsl)
 
+    # NimbleCSV: read separator from DSL and convert to string for NimbleCSV.define (expects string, not codepoint)
+    separator = AshCsv.DataLayer.Info.separator(dsl) || ?,
+
+    separator_string =
+      try do
+        <<separator::utf8>>
+      rescue
+        _ ->
+          ","
+      end
+
     func_args =
       Enum.map(columns, fn name ->
         {name, [], Elixir}
@@ -83,10 +94,19 @@ defmodule AshCsv.DataLayer.Transformers.BuildParser do
 
     map = {:%{}, [], Enum.map(columns, fn column -> {column, {column, [], Elixir}} end)}
 
+    # NimbleCSV: build per-resource parser module name (e.g. MyApp.Post.AshCsvNimbleCSV) for NimbleCSV.define
+    resource_module = Spark.Dsl.Transformer.get_persisted(dsl, :module)
+
+    csv_module =
+      Module.concat([
+        resource_module,
+        AshCsvNimbleCSV
+      ])
+
     struct =
       {:struct, [],
        [
-         Spark.Dsl.Transformer.get_persisted(dsl, :module),
+         resource_module,
          map
        ]}
 
@@ -95,6 +115,17 @@ defmodule AshCsv.DataLayer.Transformers.BuildParser do
        dsl,
        [],
        quote do
+         # NimbleCSV: define per-resource parser at compile time (replaces runtime CSV.encode/decode with separator option)
+         NimbleCSV.define(unquote(csv_module),
+           separator: unquote(separator_string),
+           line_separator: "\n"
+         )
+
+         # NimbleCSV: expose parser module so data layer can call dump_to_iodata/1 and parse_stream/1
+         def ash_csv_csv_module do
+           unquote(csv_module)
+         end
+
          def ash_csv_dump_row(unquote(map)) do
            {:ok, unquote(dump_fields)}
          catch
