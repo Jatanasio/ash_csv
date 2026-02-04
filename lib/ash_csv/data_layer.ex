@@ -209,7 +209,6 @@ defmodule AshCsv.DataLayer do
             else
               case dump_row(resource, changeset) do
                 {:ok, row} ->
-                  # Replace CSV library operations with NimbleCSV operations
                   iodata = csv_module(resource).dump_to_iodata([row])
 
                   result =
@@ -701,8 +700,7 @@ defmodule AshCsv.DataLayer do
     end
   end
 
-  # Initialize the NimbleCSV module for the resource
   defp csv_module(resource) do
-    resource.ash_csv_csv_module()
+    AshCsv.DataLayer.Info.csv_module(resource)
   end
 end

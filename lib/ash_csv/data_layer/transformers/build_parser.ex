@@ -15,7 +15,8 @@ defmodule AshCsv.DataLayer.Transformers.BuildParser do
         <<separator::utf8>>
       rescue
         _ ->
-          ","
+          raise ArgumentError,
+            "Invalid separator value: #{inspect(separator)}. Expected a valid UTF-8 character."
       end
 
     func_args =
@@ -93,12 +94,7 @@ defmodule AshCsv.DataLayer.Transformers.BuildParser do
     map = {:%{}, [], Enum.map(columns, fn column -> {column, {column, [], Elixir}} end)}
 
     resource_module = Spark.Dsl.Transformer.get_persisted(dsl, :module)
-
-    csv_module =
-      Module.concat([
-        resource_module,
-        AshCsvNimbleCSV
-      ])
+    csv_module = AshCsv.DataLayer.Info.csv_module(resource_module)
 
     struct =
       {:struct, [],
@@ -113,16 +109,12 @@ defmodule AshCsv.DataLayer.Transformers.BuildParser do
        [],
        quote do
         # Define the NimbleCSV parser
-         NimbleCSV.define(unquote(csv_module),
-           separator: unquote(separator_string),
-           line_separator: "\n"
-         )
+        NimbleCSV.define(unquote(csv_module),
+          separator: unquote(separator_string),
+          line_separator: "\n"
+        )
 
-         def ash_csv_csv_module do
-           unquote(csv_module)
-         end
-
-         def ash_csv_dump_row(unquote(map)) do
+        def ash_csv_dump_row(unquote(map)) do
            {:ok, unquote(dump_fields)}
          catch
            {:error, error} ->
